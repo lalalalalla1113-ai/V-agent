@@ -1,0 +1,34 @@
+[
+  {
+    "role": "user",
+    "prompt": "Стол",
+    "style_key": null,
+    "image_path": null,
+    "error": null,
+    "timestamp": "2026-10-04T23:36:38.143922"
+  },
+  {
+    "role": "ai",
+    "prompt": "Стол",
+    "style_key": "photo",
+    "image_path": "C:\\Users\\N.DESKTOP-36SV446\\Downloads\\V-AGENT\\ContentFarm\\images\\cd820691-0eeb-4993-95ad-28e988e33cb3.png",
+    "error": null,
+    "timestamp": "2026-10-04T23:36:41.258211"
+  },
+  {
+    "role": "user",
+    "prompt": "Машина",
+    "style_key": null,
+    "image_path": null,
+    "error": null,
+    "timestamp": "2026-10-07T00:07:23.200637"
+  },
+  {
+    "role": "ai",
+    "prompt": "Машина",
+    "style_key": "photo",
+    "image_path": "C:\\Users\\N.DESKTOP-36SV446\\Downloads\\V-AGENT\\ContentFarm\\images\\80d536f7-9e3c-4cec-8440-12a8f28f846f.png",
+    "error": null,
+    "timestamp": "2026-10-07T00:07:26.199627"
+  }
+]

@@ -1,0 +1,31 @@
+{
+  "name": "Н",
+  "age": 67,
+  "gender": "male",
+  "interests": [
+    "photo",
+    "cinema",
+    "auto"
+  ],
+  "audience": "",
+  "avatar_sticker": "",
+  "created_at": "2026-10-04T20:52:17.846621",
+  "cf_token": "cfut_PPGNS53CH6mcUYMuGVj7A7XdCKmOOAkfbsEk37Od482a581b",
+  "cf_account": "46a8fcfb13a902b0c8459992b4222edf",
+  "tg_bots": [
+    {
+      "id": "895dd802-fcf1-4069-8ae9-5aba0d20e31a",
+      "token": "8949238842:AAEOOSCDE6pxGpOGNatabUIBLUzBh0iXvgY",
+      "channel": "@testedui",
+      "name": "tested",
+      "username": "testetuibot",
+      "samples": []
+    }
+  ],
+  "tg_active_id": "895dd802-fcf1-4069-8ae9-5aba0d20e31a",
+  "bg_effect": "bubbles",
+  "bg_count_scale": 1.2999999999999998,
+  "bg_size_scale": 1.0,
+  "gen_animation": "heartbeat",
+  "ui_theme": "red_black"
+}

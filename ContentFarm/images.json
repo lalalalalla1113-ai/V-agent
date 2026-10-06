@@ -1,0 +1,51 @@
+[
+  {
+    "id": "80d536f7-9e3c-4cec-8440-12a8f28f846f",
+    "prompt": "Машина",
+    "style_key": "photo",
+    "filename": "80d536f7-9e3c-4cec-8440-12a8f28f846f.png",
+    "created_at": "2026-10-07T00:07:26.191630"
+  },
+  {
+    "id": "cd820691-0eeb-4993-95ad-28e988e33cb3",
+    "prompt": "Стол",
+    "style_key": "photo",
+    "filename": "cd820691-0eeb-4993-95ad-28e988e33cb3.png",
+    "created_at": "2026-10-04T23:36:41.248215"
+  },
+  {
+    "id": "9e9afbb8-561a-407e-9c4f-055c39ecb2d6",
+    "prompt": "Дерево",
+    "style_key": "sketch",
+    "filename": "9e9afbb8-561a-407e-9c4f-055c39ecb2d6.png",
+    "created_at": "2026-10-04T20:54:38.022815"
+  },
+  {
+    "id": "cc8befe1-c592-4980-84a4-c7fc337e7468",
+    "prompt": "Дерево",
+    "style_key": "sketch",
+    "filename": "cc8befe1-c592-4980-84a4-c7fc337e7468.png",
+    "created_at": "2026-10-04T20:54:25.787085"
+  },
+  {
+    "id": "a9cf8f51-c1e6-4dcc-9351-b0629c5b0c23",
+    "prompt": "Очень жирный",
+    "style_key": "photo",
+    "filename": "a9cf8f51-c1e6-4dcc-9351-b0629c5b0c23.png",
+    "created_at": "2026-10-04T20:54:14.377715"
+  },
+  {
+    "id": "a256f450-e6c0-4f82-a0fe-9edc0ee66f80",
+    "prompt": "Жирный низтон",
+    "style_key": "photo",
+    "filename": "a256f450-e6c0-4f82-a0fe-9edc0ee66f80.png",
+    "created_at": "2026-10-04T20:53:54.205771"
+  },
+  {
+    "id": "2e290f2e-841c-4177-9933-ce8263bc659e",
+    "prompt": "Жирный",
+    "style_key": "photo",
+    "filename": "2e290f2e-841c-4177-9933-ce8263bc659e.png",
+    "created_at": "2026-10-04T20:53:32.537370"
+  }
+]
