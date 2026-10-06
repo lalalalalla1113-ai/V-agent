@@ -1,0 +1,17 @@
+[project]
+name = "vagent"
+version = "1.0.0"
+description = "V-AGENT"
+requires-python = ">=3.10"
+dependencies = [
+    "flet==0.28.3",
+    "requests>=2.31",
+    "urllib3",
+]
+
+[tool.flet]
+product = "V-AGENT"
+org = "com.vagent"
+company = "V-AGENT"
+project = "vagent"
+icon = "icon.png"
