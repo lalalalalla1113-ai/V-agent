@@ -1,0 +1,80 @@
+name: Build V-AGENT
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  # ==========================================================================
+  # WINDOWS — сборка .exe через flet pack + PyInstaller
+  # ==========================================================================
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build EXE
+        run: |
+          flet pack main.py --name V-AGENT --icon icon.ico --add-data "assets;assets"
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: V-AGENT-windows
+          path: dist/V-AGENT.exe
+          retention-days: 1
+          if-no-files-found: error
+
+  # ==========================================================================
+  # ANDROID — сборка .apk через flet build apk
+  # ==========================================================================
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install flet
+        run: |
+          python -m pip install --upgrade pip
+          pip install "flet[all]==0.28.3"
+
+      - name: Accept Android SDK licenses
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+
+      - name: Build APK
+        run: |
+          flet build apk --product V-AGENT --org com.vagent --project vagent
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: V-AGENT-android
+          path: build/apk/*.apk
+          retention-days: 1
+          if-no-files-found: error
