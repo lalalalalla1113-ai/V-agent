@@ -1,19 +1,24 @@
 """Точка входа приложения V-AGENT."""
 
+import os
 import sys
+import random
 
-from services import paths
-
-# В .exe без консоли stdout/stderr отсутствуют — пишем в лог-файл,
-# чтобы print() не падал и было что смотреть при ошибках.
-if paths.is_frozen():
+# Логирование ДО импорта flet, чтобы поймать ошибки инициализации
+try:
+    _log_dir = os.environ.get("FLET_APP_STORAGE_DATA") or "."
     try:
-        _log = paths.data_dir() / "app.log"
-        if _log.exists() and _log.stat().st_size > 1_000_000:
-            _log.unlink()
-        sys.stdout = sys.stderr = open(_log, "a", encoding="utf-8", buffering=1)
+        os.makedirs(_log_dir, exist_ok=True)
     except Exception:
         pass
+    _log_path = os.path.join(_log_dir, "app.log")
+    _log_file = open(_log_path, "a", encoding="utf-8", buffering=1)
+    sys.stdout = _log_file
+    sys.stderr = _log_file
+    print(">>> LOG STARTED")
+except Exception:
+    pass
+
 
 import flet as ft  # noqa: E402
 
@@ -21,9 +26,4 @@ from app import main  # noqa: E402
 
 
 if __name__ == "__main__":
-    import random
-    ft.app(
-        target=main,
-        assets_dir=str(paths.resource_dir() / "assets"),
-        port=random.randint(20000, 40000),
-    )
+    ft.app(target=main, assets_dir="assets")
