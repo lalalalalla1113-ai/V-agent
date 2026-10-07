@@ -23,7 +23,7 @@ jobs:
 
       - name: Build EXE
         run: |
-          flet pack main.py --name V-AGENT --icon assets/icon.ico --add-data "assets;assets"
+          flet pack main.py --name V-AGENT --icon icon.ico --add-data "assets;assets"
 
       - name: Upload EXE
         uses: actions/upload-artifact@v4
