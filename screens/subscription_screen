@@ -1,0 +1,671 @@
+"""Экран платной подписки V-AGENT Premium.
+
+Показывает:
+  • Три тарифа: Месяц / Год / Навсегда (со скидкой).
+  • Список возможностей в каждом тарифе.
+  • Способы оплаты: Telegram Stars, банковская карта, крипта.
+  • Кнопки оплаты (пока заглушки — показывают SnackBar).
+
+Подписка хранится в профиле пользователя (поля premium_*).
+"""
+
+import threading
+from datetime import datetime
+from typing import Optional
+
+import flet as ft
+
+from services.user_profile import get_current
+from ui import theme
+from ui.effects import create_effect
+
+
+# ===========================================================================
+# Тарифы
+# ===========================================================================
+
+PLANS = [
+    {
+        "id": "month",
+        "title": "Месяц",
+        "price": "299 ₽",
+        "price_sub": "≈ 4 $ / 4 €",
+        "stars": "150 ⭐",
+        "period": "30 дней",
+        "badge": "",
+        "color": "#2196F3",
+        "discount": "",
+    },
+    {
+        "id": "year",
+        "title": "Год",
+        "price": "1 990 ₽",
+        "price_sub": "≈ 22 $ / 22 €",
+        "stars": "990 ⭐",
+        "period": "365 дней",
+        "badge": "ВЫГОДНО −45%",
+        "color": "#9C27B0",
+        "discount": "экономия 1 598 ₽",
+    },
+    {
+        "id": "forever",
+        "title": "Навсегда",
+        "price": "4 990 ₽",
+        "price_sub": "≈ 55 $ / 55 €",
+        "stars": "2 500 ⭐",
+        "period": "пожизненно",
+        "badge": "ЛУЧШИЙ ВЫБОР",
+        "color": "#FF9800",
+        "discount": "платишь один раз",
+    },
+]
+
+
+# ===========================================================================
+# Возможности по тарифам
+# ===========================================================================
+
+FEATURES_BASE = [
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "Безлимитные посты через ИИ"),
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "12 стилей текста"),
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "Генерация картинок"),
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "7 стилей изображений"),
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "Хештеги и шаблоны"),
+    (ft.Icons.CHECK_CIRCLE_ROUNDED, "Свой ключ Cloudflare"),
+]
+
+FEATURES_PREMIUM = [
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Автосоздание контента — пачка постов по одной теме"),
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Автопостинг в Telegram по расписанию"),
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Календарь напоминаний"),
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Идеи для постов — 10 идей за раз"),
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Приоритетная поддержка"),
+    (ft.Icons.AUTO_AWESOME_ROUNDED, "Обновления и новые функции"),
+]
+
+
+# ===========================================================================
+# Экран
+# ===========================================================================
+
+class SubscriptionScreen:
+    def __init__(self, page: ft.Page) -> None:
+        self.page = page
+        self.mobile = self._is_mobile()
+        self._bg_effect = None
+        self._stopped = False
+        self.selected_plan_id: str = "year"  # год — по умолчанию
+
+        self.plans_grid = ft.Row(
+            controls=[], spacing=12, run_spacing=12, wrap=True,
+        )
+        self.selected_plan_label = ft.Text(
+            "", size=12, color=theme.TEXT_SECONDARY,
+        )
+
+        self._render_plans()
+
+    # ---------- Утилиты ----------
+
+    def _is_mobile(self) -> bool:
+        try:
+            if self.page.platform in ("android", "ios"):
+                return True
+        except Exception:
+            pass
+        try:
+            w = int(self.page.width or 0)
+            return 0 < w < 700
+        except Exception:
+            return False
+
+    def stop_effect(self) -> None:
+        self._stopped = True
+        if self._bg_effect is not None:
+            try:
+                self._bg_effect.stop()
+            except Exception:
+                pass
+            self._bg_effect = None
+
+    # ---------- Построение ----------
+
+    def build(self) -> ft.Container:
+        profile = get_current()
+        effect_key = (profile.bg_effect if profile else "snow") or "snow"
+        count_scale = float(profile.bg_count_scale) if profile else 1.0
+        size_scale = float(profile.bg_size_scale) if profile else 1.0
+
+        try:
+            ww = int(self.page.window.width or self.page.width or 1920)
+            wh = int(self.page.window.height or self.page.height or 1080)
+        except Exception:
+            ww, wh = 1920, 1080
+
+        self._bg_effect = create_effect(
+            effect_key, self.page,
+            width=ww, height=wh,
+            count_scale=count_scale,
+            size_scale=size_scale,
+        )
+        bg_layer = self._bg_effect.build()
+        self._bg_effect.start()
+
+        top_pad = 32 if self.mobile else 0
+
+        # ---------- Заголовок с короной ----------
+        header = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Container(
+                        content=ft.Icon(
+                            ft.Icons.WORKSPACE_PREMIUM_ROUNDED,
+                            size=40, color=ft.Colors.WHITE,
+                        ),
+                        width=80, height=80, border_radius=24,
+                        bgcolor=theme.PRIMARY,
+                        alignment=ft.alignment.center,
+                        shadow=ft.BoxShadow(
+                            spread_radius=2,
+                            blur_radius=20,
+                            color=ft.Colors.with_opacity(0.5, theme.PRIMARY),
+                        ),
+                    ),
+                    ft.Container(height=16),
+                    ft.Text(
+                        "V-AGENT Premium",
+                        size=28, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(height=6),
+                    ft.Text(
+                        "Разблокируй все возможности и экономь время",
+                        size=13, color=theme.TEXT_SECONDARY,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                ],
+                spacing=0, tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            padding=ft.padding.only(
+                left=24, right=24, top=top_pad + 24, bottom=20,
+            ),
+        )
+
+        # ---------- Тарифы ----------
+        plans_block = ft.Container(
+            content=self.plans_grid,
+            padding=ft.padding.symmetric(horizontal=24, vertical=8),
+        )
+
+        # ---------- Что входит ----------
+        features_block = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Что входит в подписку",
+                        size=14, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY,
+                    ),
+                    ft.Container(height=12),
+
+                    # Базовый блок
+                    self._make_features_card(
+                        title="Базовые возможности",
+                        items=FEATURES_BASE,
+                        color=theme.PRIMARY,
+                        always_free=True,
+                    ),
+                    ft.Container(height=10),
+
+                    # Premium-блок
+                    self._make_features_card(
+                        title="Только в Premium",
+                        items=FEATURES_PREMIUM,
+                        color="#FF9800",
+                        always_free=False,
+                    ),
+                ],
+                spacing=0, tight=True,
+            ),
+            padding=ft.padding.symmetric(horizontal=24, vertical=12),
+        )
+
+        # ---------- Оплата ----------
+        payment_block = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Способ оплаты",
+                        size=14, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY,
+                    ),
+                    ft.Container(height=6),
+                    self.selected_plan_label,
+                    ft.Container(height=12),
+                    self._make_payment_buttons(),
+                ],
+                spacing=0, tight=True,
+            ),
+            padding=ft.padding.symmetric(horizontal=24, vertical=12),
+        )
+
+        # ---------- Информация ----------
+        info_block = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.LOCK_ROUNDED, size=14,
+                                    color=theme.TEXT_MUTED),
+                            ft.Text(
+                                "Оплата защищена. Данные не передаются третьим лицам.",
+                                size=11, color=theme.TEXT_MUTED,
+                            ),
+                        ],
+                        spacing=6, tight=True,
+                    ),
+                    ft.Container(height=4),
+                    ft.Row(
+                        controls=[
+                            ft.Icon(ft.Icons.REFRESH_ROUNDED, size=14,
+                                    color=theme.TEXT_MUTED),
+                            ft.Text(
+                                "Подписку можно отменить в любой момент.",
+                                size=11, color=theme.TEXT_MUTED,
+                            ),
+                        ],
+                        spacing=6, tight=True,
+                    ),
+                ],
+                spacing=0, tight=True,
+            ),
+            padding=ft.padding.symmetric(horizontal=24, vertical=16),
+        )
+
+        content_col = ft.Column(
+            controls=[
+                header,
+                plans_block,
+                features_block,
+                payment_block,
+                info_block,
+                ft.Container(height=60),
+            ],
+            spacing=0,
+            expand=True,
+            scroll=ft.ScrollMode.AUTO,
+        )
+
+        main_layer = ft.Container(
+            content=content_col,
+            expand=True,
+            bgcolor=ft.Colors.with_opacity(0.6, theme.BG_DARK),
+        )
+
+        return ft.Container(
+            content=ft.Stack(
+                controls=[bg_layer, main_layer],
+                expand=True,
+            ),
+            expand=True,
+        )
+
+    # ---------- Карточки тарифов ----------
+
+    def _render_plans(self) -> None:
+        self.plans_grid.controls.clear()
+        for plan in PLANS:
+            is_active = plan["id"] == self.selected_plan_id
+            self.plans_grid.controls.append(
+                self._make_plan_card(plan, is_active)
+            )
+        self._update_selected_label()
+
+    def _make_plan_card(self, plan: dict, is_active: bool) -> ft.Container:
+        color = plan["color"]
+        badge_text = plan.get("badge", "")
+        discount_text = plan.get("discount", "")
+
+        bg = (
+            ft.Colors.with_opacity(0.15, color) if is_active
+            else ft.Colors.with_opacity(0.7, theme.SURFACE)
+        )
+        border = color if is_active else theme.DRAWER_ITEM_BORDER
+
+        def on_click(e):
+            self._select_plan(plan["id"])
+
+        controls = []
+
+        # Бейдж
+        if badge_text:
+            controls.append(
+                ft.Container(
+                    content=ft.Text(
+                        badge_text, size=9,
+                        weight=ft.FontWeight.BOLD,
+                        color=ft.Colors.WHITE,
+                    ),
+                    padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                    bgcolor=color,
+                    border_radius=6,
+                )
+            )
+            controls.append(ft.Container(height=8))
+
+        # Название
+        controls.append(
+            ft.Text(
+                plan["title"], size=16,
+                weight=ft.FontWeight.BOLD,
+                color=theme.TEXT_PRIMARY,
+            )
+        )
+        controls.append(ft.Container(height=6))
+
+        # Цена
+        controls.append(
+            ft.Text(
+                plan["price"], size=24,
+                weight=ft.FontWeight.BOLD,
+                color=color,
+            )
+        )
+        controls.append(
+            ft.Text(
+                plan["price_sub"], size=11,
+                color=theme.TEXT_SECONDARY,
+            )
+        )
+        controls.append(ft.Container(height=2))
+        controls.append(
+            ft.Text(
+                plan["period"], size=10,
+                color=theme.TEXT_MUTED,
+            )
+        )
+
+        if discount_text:
+            controls.append(ft.Container(height=6))
+            controls.append(
+                ft.Text(
+                    discount_text, size=10,
+                    color=theme.SUCCESS,
+                    weight=ft.FontWeight.BOLD,
+                )
+            )
+
+        controls.append(ft.Container(expand=True))
+
+        # Стоимость в звёздах
+        controls.append(
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.STAR_ROUNDED, size=12,
+                                color="#FFC107"),
+                        ft.Text(
+                            plan["stars"], size=11,
+                            color=theme.TEXT_SECONDARY,
+                        ),
+                    ],
+                    spacing=4, tight=True,
+                    alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.only(top=6),
+            )
+        )
+
+        return ft.Container(
+            content=ft.Column(
+                controls=controls,
+                spacing=0, tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
+            width=170, height=240,
+            padding=ft.padding.all(14),
+            bgcolor=bg,
+            border=ft.border.all(2, border),
+            border_radius=16,
+            on_click=on_click,
+            ink=True,
+            animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+            scale=1.0,
+            on_hover=self._hover_scale,
+        )
+
+    def _hover_scale(self, e: ft.ControlEvent) -> None:
+        try:
+            ctrl = e.control
+            if e.data == "true":
+                ctrl.scale = 1.03
+            else:
+                ctrl.scale = 1.0
+            ctrl.update()
+        except Exception:
+            pass
+
+    def _select_plan(self, plan_id: str) -> None:
+        self.selected_plan_id = plan_id
+        self._render_plans()
+        try:
+            self.page.update()
+        except Exception:
+            pass
+
+    def _update_selected_label(self) -> None:
+        for p in PLANS:
+            if p["id"] == self.selected_plan_id:
+                self.selected_plan_label.value = (
+                    f"Выбрано: {p['title']} — {p['price']}"
+                )
+                self.selected_plan_label.color = theme.TEXT_SECONDARY
+                return
+        self.selected_plan_label.value = "Выбери тариф"
+
+    # ---------- Карточка возможностей ----------
+
+    def _make_features_card(
+        self, title: str, items: list, color: str, always_free: bool,
+    ) -> ft.Container:
+        rows = []
+        for icon, text in items:
+            rows.append(
+                ft.Row(
+                    controls=[
+                        ft.Icon(icon, size=16, color=color),
+                        ft.Container(
+                            content=ft.Text(
+                                text, size=12,
+                                color=theme.TEXT_PRIMARY,
+                            ),
+                            expand=True,
+                            margin=ft.margin.only(left=8),
+                        ),
+                    ],
+                    spacing=0,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                )
+            )
+
+        header_controls = [
+            ft.Container(
+                content=ft.Text(
+                    "FREE" if always_free else "PREMIUM",
+                    size=9, weight=ft.FontWeight.BOLD,
+                    color=ft.Colors.WHITE,
+                ),
+                padding=ft.padding.symmetric(horizontal=8, vertical=3),
+                bgcolor=(theme.PRIMARY if always_free else "#FF9800"),
+                border_radius=6,
+            ),
+            ft.Container(width=8),
+            ft.Text(
+                title, size=13, weight=ft.FontWeight.BOLD,
+                color=theme.TEXT_PRIMARY,
+            ),
+        ]
+
+        return ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=header_controls,
+                        spacing=0,
+                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                    ),
+                    ft.Container(height=10),
+                    ft.Column(controls=rows, spacing=8, tight=True),
+                ],
+                spacing=0, tight=True,
+            ),
+            padding=ft.padding.all(14),
+            bgcolor=theme.SURFACE,
+            border=ft.border.all(
+                1,
+                ft.Colors.with_opacity(0.4, color),
+            ),
+            border_radius=14,
+        )
+
+    # ---------- Кнопки оплаты ----------
+
+    def _make_payment_buttons(self) -> ft.Column:
+        def _stub(provider: str):
+            def handler(e):
+                plan = self._get_selected_plan()
+                plan_title = plan["title"] if plan else "—"
+                plan_price = plan["price"] if plan else "—"
+
+                self.page.open(ft.SnackBar(
+                    content=ft.Text(
+                        f"Оплата через «{provider}» появится в ближайшем "
+                        f"обновлении.\n\nТариф: {plan_title}\n"
+                        f"Сумма: {plan_price}"
+                    ),
+                    duration=3500,
+                    bgcolor=theme.SURFACE,
+                ))
+            return handler
+
+        def _telegram_stars(e):
+            plan = self._get_selected_plan()
+            plan_title = plan["title"] if plan else "—"
+            plan_stars = plan["stars"] if plan else "—"
+            self.page.open(ft.SnackBar(
+                content=ft.Text(
+                    f"Оплата Telegram Stars — в разработке.\n\n"
+                    f"Тариф: {plan_title}\nСтоимость: {plan_stars}"
+                ),
+                duration=3500,
+                bgcolor=theme.SURFACE,
+            ))
+
+        buttons = [
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.SEND_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                        ft.Text(
+                            "Telegram Stars", size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.WHITE,
+                        ),
+                        ft.Container(expand=True),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                    ],
+                    spacing=12,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=18, vertical=16),
+                bgcolor="#229ED9",
+                border_radius=12,
+                on_click=_telegram_stars,
+                ink=True,
+            ),
+            ft.Container(height=10),
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.CREDIT_CARD_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                        ft.Text(
+                            "Банковская карта", size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.WHITE,
+                        ),
+                        ft.Container(expand=True),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                    ],
+                    spacing=12,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=18, vertical=16),
+                bgcolor=theme.PRIMARY,
+                border_radius=12,
+                on_click=_stub("Банковская карта"),
+                ink=True,
+            ),
+            ft.Container(height=10),
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.CURRENCY_BITCOIN_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                        ft.Text(
+                            "Криптовалюта", size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.WHITE,
+                        ),
+                        ft.Container(expand=True),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=20,
+                                color=ft.Colors.WHITE),
+                    ],
+                    spacing=12,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=18, vertical=16),
+                bgcolor="#F7931A",
+                border_radius=12,
+                on_click=_stub("Криптовалюта"),
+                ink=True,
+            ),
+            ft.Container(height=10),
+            ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.ACCOUNT_BALANCE_ROUNDED, size=20,
+                                color=theme.TEXT_PRIMARY),
+                        ft.Text(
+                            "СБП / Перевод", size=14,
+                            weight=ft.FontWeight.BOLD,
+                            color=theme.TEXT_PRIMARY,
+                        ),
+                        ft.Container(expand=True),
+                        ft.Icon(ft.Icons.CHEVRON_RIGHT_ROUNDED, size=20,
+                                color=theme.TEXT_PRIMARY),
+                    ],
+                    spacing=12,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(horizontal=18, vertical=16),
+                bgcolor=theme.SURFACE,
+                border=ft.border.all(1, theme.DRAWER_ITEM_BORDER),
+                border_radius=12,
+                on_click=_stub("СБП / Перевод"),
+                ink=True,
+            ),
+        ]
+
+        return ft.Column(controls=buttons, spacing=0, tight=True)
+
+    def _get_selected_plan(self) -> Optional[dict]:
+        for p in PLANS:
+            if p["id"] == self.selected_plan_id:
+                return p
+        return None
