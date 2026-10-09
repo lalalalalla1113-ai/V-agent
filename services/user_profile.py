@@ -1,4 +1,8 @@
-"""Профиль пользователя."""
+"""Профиль пользователя.
+
+ВАЖНО: все файлы профиля (включая cf_token, cf_account, tg_bots)
+хранятся ТОЛЬКО в папке data_dir() — вне репозитория проекта.
+"""
 
 import json
 import os
@@ -38,6 +42,9 @@ class UserProfile:
 
     tg_bots: list = field(default_factory=list)
     tg_active_id: str = ""
+
+    tg_vpn_hint_hidden: bool = False
+    tg_vpn_hint_shown: bool = False
 
     bg_effect: str = "snow"
     bg_count_scale: float = 1.0
@@ -114,7 +121,6 @@ class UserProfile:
     # ---------- Примеры постов ----------
 
     def get_bot_samples(self, bot_id: Optional[str] = None) -> list:
-        """Возвращает список примеров постов для бота."""
         if bot_id is None:
             bot = self.get_active_bot()
         else:
@@ -131,7 +137,6 @@ class UserProfile:
         return samples
 
     def set_bot_samples(self, samples: list, bot_id: Optional[str] = None) -> None:
-        """Сохраняет список примеров постов для бота."""
         if bot_id is None:
             bot = self.get_active_bot()
         else:
@@ -162,6 +167,8 @@ class UserProfile:
             cf_account=data.get("cf_account", ""),
             tg_bots=list(data.get("tg_bots", [])),
             tg_active_id=data.get("tg_active_id", ""),
+            tg_vpn_hint_hidden=bool(data.get("tg_vpn_hint_hidden", False)),
+            tg_vpn_hint_shown=bool(data.get("tg_vpn_hint_shown", False)),
             bg_effect=data.get("bg_effect", "snow"),
             bg_count_scale=float(data.get("bg_count_scale", 1.0)),
             bg_size_scale=float(data.get("bg_size_scale", 1.0)),
@@ -219,6 +226,6 @@ def get_current() -> Optional[UserProfile]:
     return current_profile
 
 
-def set_current(profile: UserProfile) -> None:
+def set_current(profile: Optional[UserProfile]) -> None:
     global current_profile
     current_profile = profile
