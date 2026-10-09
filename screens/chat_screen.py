@@ -41,7 +41,6 @@ class ChatScreen:
         self._ensure_project_loaded()
         self.mobile = _is_mobile(page)
 
-        # Вложения в РЕАЛЬНОЙ папке данных
         self.attachments_dir = _paths.data_dir() / "attachments"
         self.attachments_dir.mkdir(parents=True, exist_ok=True)
 
@@ -127,7 +126,6 @@ class ChatScreen:
             controls=[], spacing=8, wrap=True, visible=False,
         )
 
-        # multiline TextField: Enter внутри — новая строка (стандартное поведение)
         self.input_field = ft.TextField(
             hint_text="Напиши свою идею...",
             multiline=True,
@@ -244,6 +242,12 @@ class ChatScreen:
                 item_id="image",
             ),
             SidebarItem(
+                icon=ft.Icons.AUTO_AWESOME_ROUNDED,
+                label="Автосоздание контента",
+                on_click=lambda e: self._handle_nav("content"),
+                item_id="content",
+            ),
+            SidebarItem(
                 icon=ft.Icons.TAG_ROUNDED,
                 label="Хештеги",
                 on_click=lambda e: self._handle_nav("hashtags"),
@@ -280,11 +284,13 @@ class ChatScreen:
             ("home", ft.Icons.HOME_ROUNDED, "Главная"),
             ("ai_chat", ft.Icons.CHAT_BUBBLE_OUTLINE_ROUNDED, "Чат с ИИ"),
             ("image", ft.Icons.IMAGE_ROUNDED, "Генерация картинки"),
+            ("content", ft.Icons.AUTO_AWESOME_ROUNDED, "Автосоздание контента"),
             ("hashtags", ft.Icons.TAG_ROUNDED, "Хештеги"),
             ("templates", ft.Icons.GRID_VIEW_ROUNDED, "Шаблоны"),
             ("ideas", ft.Icons.LIGHTBULB_OUTLINE_ROUNDED, "Идеи для постов"),
             ("telegram", ft.Icons.SEND_ROUNDED, "Telegram"),
             ("settings", ft.Icons.SETTINGS_ROUNDED, "Настройки"),
+            ("subscription", ft.Icons.WORKSPACE_PREMIUM_ROUNDED, "Premium"),
         ]
 
         def close_menu(ev=None):
@@ -299,17 +305,25 @@ class ChatScreen:
                 self._handle_nav(chat_id)
 
             active = chat_id == self.current_chat_id
+            is_premium = chat_id == "subscription"
+
+            # Цвет иконки для Premium
+            icon_color = (
+                "#FFC107" if is_premium and not active
+                else (ft.Colors.WHITE if active else theme.TEXT_PRIMARY)
+            )
+            text_color = (
+                "#FFC107" if is_premium and not active
+                else (ft.Colors.WHITE if active else theme.TEXT_PRIMARY)
+            )
 
             return ft.Container(
                 content=ft.Row(
                     controls=[
-                        ft.Icon(
-                            icon, size=20,
-                            color=ft.Colors.WHITE if active else theme.TEXT_PRIMARY,
-                        ),
+                        ft.Icon(icon, size=20, color=icon_color),
                         ft.Text(
                             label, size=14,
-                            color=ft.Colors.WHITE if active else theme.TEXT_PRIMARY,
+                            color=text_color,
                             weight=ft.FontWeight.BOLD if active else ft.FontWeight.NORMAL,
                         ),
                     ],
@@ -563,7 +577,6 @@ class ChatScreen:
             return
         if e.shift:
             return
-        # Отправляем ТОЛЬКО по Ctrl+Enter
         if not e.ctrl:
             return
         if self.current_chat_id != "home":
@@ -661,6 +674,16 @@ class ChatScreen:
                     except Exception:
                         pass
 
+            elif self.current_chat_id == "content":
+                from screens.content_screen import ContentScreen
+                screen = _get("content", lambda: ContentScreen(self.page))
+                content = screen.build()
+                if getattr(screen, "_bg_effect", None) is not None:
+                    try:
+                        screen._bg_effect.resume()
+                    except Exception:
+                        pass
+
             elif self.current_chat_id == "telegram":
                 from screens.telegram_screen import TelegramScreen
                 screen = TelegramScreen(self.page)
@@ -695,6 +718,17 @@ class ChatScreen:
             elif self.current_chat_id == "ideas":
                 from screens.ideas_screen import IdeasScreen
                 screen = _get("ideas", lambda: IdeasScreen(self.page))
+                content = screen.build()
+                if getattr(screen, "_bg_effect", None) is not None:
+                    try:
+                        screen._bg_effect.resume()
+                    except Exception:
+                        pass
+
+            elif self.current_chat_id == "subscription":
+                from screens.subscription_screen import SubscriptionScreen
+                screen = _get("subscription",
+                              lambda: SubscriptionScreen(self.page))
                 content = screen.build()
                 if getattr(screen, "_bg_effect", None) is not None:
                     try:
@@ -775,7 +809,6 @@ class ChatScreen:
             pass
 
     def _do_logout(self) -> None:
-        """Выход: удаляем ТОЛЬКО пользовательские данные, код не трогаем."""
         state.current_project = None
 
         self._stop_thinking(remove_widget=True)
@@ -1051,20 +1084,15 @@ class ChatScreen:
     # ---------- Отправка в Telegram из карточки ИИ ----------
 
     def _handle_send_to_tg(self, message_id: str, text: str) -> None:
-        """Открывает вкладку Telegram с предзаполненной темой."""
         try:
-            # Переходим на вкладку Telegram
             self._handle_nav("telegram")
 
-            # Даём время на отрисовку и вызываем форму с предзаполнением
             def _open_form():
                 try:
                     screen = self._screen_cache.get("telegram")
                     if screen is None:
                         return
-                    # Если метод есть — открываем форму с текстом
                     if hasattr(screen, "open_post_form_with"):
-                        # Берём первые 60 символов текста как тему
                         short_topic = text.strip()[:120]
                         screen.open_post_form_with(topic=short_topic, full_text=text)
                 except Exception as ex:
@@ -1114,7 +1142,6 @@ class ChatScreen:
 
         self._pending_ai_attachments = attachments_copy
 
-        # Стиль и профиль фиксируем СЕЙЧАС, чтобы не потерять
         style_for_gen = self.current_style or "simple"
 
         def _worker():
