@@ -205,29 +205,16 @@ HTML_FORMAT_EXAMPLE = (
 # НОРМАЛИЗАЦИЯ ТЕКСТА
 # ===========================================================================
 
-# Маркеры, с которых начинается пункт списка
 _BULLET_MARKERS = ["▫️", "▫", "✅", "🔹", "🔸", "•", "▪️", "▪", "–", "—"]
-
-# Регулярка: ищем ситуацию, когда маркер стоит НЕ в начале строки,
-# а приклеен к предыдущему тексту. Перед ним обычно пробел или конец
-# предложения.
-_BULLET_SPLIT_RE = re.compile(
-    r"(?<!\n)\s+(?=[▫✅🔹🔸•▪–—])"
-)
 
 
 def _normalize_bullets(text: str) -> str:
-    """Разбивает «▫️ пункт ▫️ пункт ▫️ пункт» в одну строку
+    """Разбивает «▫️ пункт ▫️ пункт» в одну строку
     на «▫️ пункт\\n▫️ пункт\\n▫️ пункт».
-
-    Работает с любыми маркерами из _BULLET_MARKERS.
-    Не трогает содержимое тегов.
     """
     if not text:
         return text
 
-    # Разделяем по тегам-блокам <blockquote>…</blockquote>, чтобы
-    # не ломать цитаты (внутри цитаты тоже могут быть маркеры).
     block_re = re.compile(
         r"(<blockquote(?:\s[^>]*)?>.*?</blockquote>)",
         re.DOTALL | re.IGNORECASE,
@@ -249,8 +236,6 @@ def _normalize_bullets(text: str) -> str:
         if not s:
             return s
 
-        # Защищаем теги, чтобы не разрезать их: временно убираем
-        # всё, что в угловых скобках
         tag_pattern = re.compile(r"<[^>]+>")
         tags_found = []
 
@@ -260,28 +245,17 @@ def _normalize_bullets(text: str) -> str:
 
         protected = tag_pattern.sub(_stash, s)
 
-        # 1. Вставляем перенос перед каждым маркером, который идёт
-        #    не с начала строки и не сразу после \n
         for marker in _BULLET_MARKERS:
-            # пробел + маркер → \n + маркер
             protected = protected.replace(f" {marker}", f"\n{marker}")
-            # знак препинания + маркер (на всякий)
             for punct in [".", "!", "?", ","]:
                 protected = protected.replace(
                     f"{punct}{marker}", f"{punct}\n{marker}"
                 )
 
-        # 2. Если маркер оказался в начале строки после \n — убираем
-        #    лишние пробелы перед ним
         protected = re.sub(r"\n[ \t]+(?=[▫✅🔹🔸•▪–—])", "\n", protected)
-
-        # 3. Убираем \n в самом начале (если первый пункт — сразу)
         protected = protected.lstrip("\n")
-
-        # 4. Схлопываем 3+ пустых строк в 2
         protected = re.sub(r"\n{3,}", "\n\n", protected)
 
-        # 5. Возвращаем теги
         def _unstash(m):
             idx = int(m.group(1))
             if 0 <= idx < len(tags_found):
@@ -289,13 +263,9 @@ def _normalize_bullets(text: str) -> str:
             return ""
 
         protected = re.sub(r"\x00TAG(\d+)\x00", _unstash, protected)
-
         return protected
 
     def _normalize_quote(s: str) -> str:
-        """Внутри blockquote тоже нормализуем переносы строк, но
-        не выходим за пределы тега."""
-        # Просто заменяем " ▫️" на "\n▫️" внутри цитаты
         for marker in _BULLET_MARKERS:
             s = s.replace(f" {marker}", f"\n{marker}")
         s = re.sub(r"\n{2,}", "\n", s)
@@ -311,20 +281,15 @@ def _normalize_bullets(text: str) -> str:
 
 
 def _clean_whitespace(text: str) -> str:
-    """Убирает множественные пробелы, но не трогает переносы строк."""
     if not text:
         return text
-    # Заменяем все табы и многократные пробелы (кроме переносов)
     text = re.sub(r"[ \t]{2,}", " ", text)
-    # Убираем пробелы перед переносами
     text = re.sub(r" +\n", "\n", text)
-    # Убираем пробелы в конце
     text = text.rstrip() + "\n"
     return text
 
 
 def _postprocess_variant(text: str) -> str:
-    """Финальная обработка одного варианта поста."""
     if not text:
         return text
     text = text.strip()
@@ -431,15 +396,30 @@ def _parse_variants(raw: str) -> list:
 
 def generate_content(idea, style, history=None, profile=None,
                      hashtag_style="mixed", samples=None, auto_add=True):
-    """Генерирует 2 варианта поста.
+    """Генерирует 2 варианта поста."""
+    print(f"[TEXT_AI] generate_content: style={style}, "
+          f"idea_len={len(idea or '')}, "
+          f"profile={'есть' if profile else 'нет'}, "
+          f"token={'есть' if (profile and getattr(profile, 'cf_token', '')) else 'НЕТ'}")
 
-    samples — список примеров постов канала.
-    auto_add — True: ИИ может добавлять общеизвестные факты;
-               False: пишет строго по теме, просит 2+ факта.
-    """
     ok, hits = bad_words.check_text(idea)
     if not ok:
         return [bad_words.forbidden_message(hits)]
+
+    # Проверяем токен ДО генерации
+    try:
+        from services import cf_config
+        account, token = cf_config.get_cf_credentials()
+        if not account or not token:
+            err = cf_config.last_error or "Ключ Cloudflare не задан"
+            print(f"[TEXT_AI] НЕТ КЛЮЧА: {err}")
+            return [
+                f"❌ {err}",
+                "Открой Настройки → Cloudflare ключ и вставь токен.",
+            ]
+        print(f"[TEXT_AI] account={account[:8]}..., token={token[:12]}...")
+    except Exception as ex:
+        print(f"[TEXT_AI] cf_config error: {ex}")
 
     full_prompt = _build_prompt(idea, style, profile, hashtag_style,
                                 samples, auto_add)
@@ -450,8 +430,12 @@ def generate_content(idea, style, history=None, profile=None,
         max_tokens=1500,
     )
     if not result:
-        return ["❌ Не удалось сгенерировать текст.",
-                "Попробуй ещё раз через минуту."]
+        err = getattr(cf_text, "last_error", "") or "неизвестная ошибка"
+        print(f"[TEXT_AI] cf_text.ask вернул None: {err}")
+        return [
+            f"❌ Не удалось сгенерировать текст ({err}).",
+            "Проверь ключ Cloudflare и интернет.",
+        ]
     return _parse_variants(result)
 
 
