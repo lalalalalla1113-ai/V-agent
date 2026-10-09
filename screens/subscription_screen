@@ -1,12 +1,10 @@
 """Экран платной подписки V-AGENT Premium.
 
 Показывает:
-  • Три тарифа: Месяц / Год / Навсегда (со скидкой).
-  • Список возможностей в каждом тарифе.
-  • Способы оплаты: Telegram Stars, банковская карта, крипта.
+  • Три тарифа: Месяц / Год / Навсегда.
+  • Список возможностей — Free vs Premium.
+  • Способы оплаты: Telegram Stars, карта, крипта, СБП.
   • Кнопки оплаты (пока заглушки — показывают SnackBar).
-
-Подписка хранится в профиле пользователя (поля premium_*).
 """
 
 import threading
@@ -62,7 +60,7 @@ PLANS = [
 
 
 # ===========================================================================
-# Возможности по тарифам
+# Возможности
 # ===========================================================================
 
 FEATURES_BASE = [
@@ -94,14 +92,22 @@ class SubscriptionScreen:
         self.mobile = self._is_mobile()
         self._bg_effect = None
         self._stopped = False
-        self.selected_plan_id: str = "year"  # год — по умолчанию
+        self.selected_plan_id: str = "year"
 
-        self.plans_grid = ft.Row(
-            controls=[], spacing=12, run_spacing=12, wrap=True,
+        self.plans_row = ft.Row(
+            controls=[],
+            spacing=12,
+            run_spacing=12,
+            wrap=True,
+            alignment=ft.MainAxisAlignment.CENTER,
         )
         self.selected_plan_label = ft.Text(
-            "", size=12, color=theme.TEXT_SECONDARY,
+            "Выбери тариф",
+            size=12,
+            color=theme.TEXT_SECONDARY,
+            text_align=ft.TextAlign.CENTER,
         )
+        self._plan_widgets: dict = {}
 
         self._render_plans()
 
@@ -142,18 +148,24 @@ class SubscriptionScreen:
         except Exception:
             ww, wh = 1920, 1080
 
-        self._bg_effect = create_effect(
-            effect_key, self.page,
-            width=ww, height=wh,
-            count_scale=count_scale,
-            size_scale=size_scale,
-        )
+        if self._bg_effect is None:
+            self._bg_effect = create_effect(
+                effect_key, self.page,
+                width=ww, height=wh,
+                count_scale=count_scale,
+                size_scale=size_scale,
+            )
+            self._bg_effect.start()
+        else:
+            try:
+                self._bg_effect.resume()
+            except Exception:
+                pass
         bg_layer = self._bg_effect.build()
-        self._bg_effect.start()
 
         top_pad = 32 if self.mobile else 0
 
-        # ---------- Заголовок с короной ----------
+        # ---------- Заголовок ----------
         header = ft.Container(
             content=ft.Column(
                 controls=[
@@ -195,7 +207,20 @@ class SubscriptionScreen:
 
         # ---------- Тарифы ----------
         plans_block = ft.Container(
-            content=self.plans_grid,
+            content=ft.Column(
+                controls=[
+                    ft.Text(
+                        "Выбери тариф",
+                        size=14, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Container(height=14),
+                    self.plans_row,
+                ],
+                spacing=0, tight=True,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+            ),
             padding=ft.padding.symmetric(horizontal=24, vertical=8),
         )
 
@@ -209,8 +234,6 @@ class SubscriptionScreen:
                         color=theme.TEXT_PRIMARY,
                     ),
                     ft.Container(height=12),
-
-                    # Базовый блок
                     self._make_features_card(
                         title="Базовые возможности",
                         items=FEATURES_BASE,
@@ -218,8 +241,6 @@ class SubscriptionScreen:
                         always_free=True,
                     ),
                     ft.Container(height=10),
-
-                    # Premium-блок
                     self._make_features_card(
                         title="Только в Premium",
                         items=FEATURES_PREMIUM,
@@ -312,18 +333,21 @@ class SubscriptionScreen:
             expand=True,
         )
 
-    # ---------- Карточки тарифов ----------
+    # ---------- Тарифы ----------
 
     def _render_plans(self) -> None:
-        self.plans_grid.controls.clear()
+        self.plans_row.controls.clear()
+        self._plan_widgets.clear()
+
         for plan in PLANS:
             is_active = plan["id"] == self.selected_plan_id
-            self.plans_grid.controls.append(
-                self._make_plan_card(plan, is_active)
-            )
+            card, ref = self._make_plan_card(plan, is_active)
+            self.plans_row.controls.append(card)
+            self._plan_widgets[plan["id"]] = ref
+
         self._update_selected_label()
 
-    def _make_plan_card(self, plan: dict, is_active: bool) -> ft.Container:
+    def _make_plan_card(self, plan: dict, is_active: bool):
         color = plan["color"]
         badge_text = plan.get("badge", "")
         discount_text = plan.get("discount", "")
@@ -334,12 +358,8 @@ class SubscriptionScreen:
         )
         border = color if is_active else theme.DRAWER_ITEM_BORDER
 
-        def on_click(e):
-            self._select_plan(plan["id"])
-
         controls = []
 
-        # Бейдж
         if badge_text:
             controls.append(
                 ft.Container(
@@ -347,6 +367,7 @@ class SubscriptionScreen:
                         badge_text, size=9,
                         weight=ft.FontWeight.BOLD,
                         color=ft.Colors.WHITE,
+                        text_align=ft.TextAlign.CENTER,
                     ),
                     padding=ft.padding.symmetric(horizontal=8, vertical=3),
                     bgcolor=color,
@@ -355,28 +376,28 @@ class SubscriptionScreen:
             )
             controls.append(ft.Container(height=8))
 
-        # Название
         controls.append(
             ft.Text(
                 plan["title"], size=16,
                 weight=ft.FontWeight.BOLD,
                 color=theme.TEXT_PRIMARY,
+                text_align=ft.TextAlign.CENTER,
             )
         )
         controls.append(ft.Container(height=6))
-
-        # Цена
         controls.append(
             ft.Text(
                 plan["price"], size=24,
                 weight=ft.FontWeight.BOLD,
                 color=color,
+                text_align=ft.TextAlign.CENTER,
             )
         )
         controls.append(
             ft.Text(
                 plan["price_sub"], size=11,
                 color=theme.TEXT_SECONDARY,
+                text_align=ft.TextAlign.CENTER,
             )
         )
         controls.append(ft.Container(height=2))
@@ -384,6 +405,7 @@ class SubscriptionScreen:
             ft.Text(
                 plan["period"], size=10,
                 color=theme.TEXT_MUTED,
+                text_align=ft.TextAlign.CENTER,
             )
         )
 
@@ -394,12 +416,12 @@ class SubscriptionScreen:
                     discount_text, size=10,
                     color=theme.SUCCESS,
                     weight=ft.FontWeight.BOLD,
+                    text_align=ft.TextAlign.CENTER,
                 )
             )
 
         controls.append(ft.Container(expand=True))
 
-        # Стоимость в звёздах
         controls.append(
             ft.Container(
                 content=ft.Row(
@@ -418,7 +440,7 @@ class SubscriptionScreen:
             )
         )
 
-        return ft.Container(
+        container = ft.Container(
             content=ft.Column(
                 controls=controls,
                 spacing=0, tight=True,
@@ -429,12 +451,15 @@ class SubscriptionScreen:
             bgcolor=bg,
             border=ft.border.all(2, border),
             border_radius=16,
-            on_click=on_click,
+            on_click=lambda e, pid=plan["id"]: self._select_plan(pid),
             ink=True,
             animate_scale=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
             scale=1.0,
             on_hover=self._hover_scale,
         )
+
+        ref = {"container": container, "color": color}
+        return container, ref
 
     def _hover_scale(self, e: ft.ControlEvent) -> None:
         try:
@@ -448,6 +473,8 @@ class SubscriptionScreen:
             pass
 
     def _select_plan(self, plan_id: str) -> None:
+        if self.selected_plan_id == plan_id:
+            return
         self.selected_plan_id = plan_id
         self._render_plans()
         try:
@@ -459,7 +486,8 @@ class SubscriptionScreen:
         for p in PLANS:
             if p["id"] == self.selected_plan_id:
                 self.selected_plan_label.value = (
-                    f"Выбрано: {p['title']} — {p['price']}"
+                    f"Выбрано: {p['title']} — {p['price']} "
+                    f"({p['stars']})"
                 )
                 self.selected_plan_label.color = theme.TEXT_SECONDARY
                 return
