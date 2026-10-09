@@ -31,6 +31,41 @@ def _is_mobile(page: ft.Page) -> bool:
         return False
 
 
+def _hard_exit() -> None:
+    """Жёстко завершает процесс.
+
+    Перед выходом пытается остановить известные фоновые потоки,
+    но в любом случае через короткое время вызывает os._exit(0),
+    чтобы окно не зависало.
+    """
+    # 1. Стоп планировщика Telegram
+    try:
+        s = tg_scheduler.get_global()
+        if s is not None:
+            s.stop()
+    except Exception as ex:
+        print(f"[EXIT] scheduler stop error: {ex}")
+
+    # 2. Стоп фоновых потоков текущего экрана
+    try:
+        from services.user_profile import get_current
+        # ChatScreen доступен через page._vagent_chat_screen (если установили)
+        pass
+    except Exception:
+        pass
+
+    # 3. Даём 200 мс на завершение, потом убиваем процесс
+    def _force():
+        try:
+            os._exit(0)
+        except Exception:
+            pass
+
+    t = threading.Timer(0.2, _force)
+    t.daemon = True
+    t.start()
+
+
 def main(page: ft.Page) -> None:
     page.title = "V-AGENT"
 
@@ -45,7 +80,6 @@ def main(page: ft.Page) -> None:
         _theme_key = "dark_purple"
     theme.apply(_theme_key)
 
-    # Режим Flet: тёмный или светлый — из палитры темы
     try:
         page.theme_mode = (
             ft.ThemeMode.DARK if theme.IS_DARK else ft.ThemeMode.LIGHT
@@ -105,24 +139,15 @@ def main(page: ft.Page) -> None:
                     print(f"[APP] minimize error: {ex}")
 
             def do_exit(ev):
+                # 1. Пытаемся закрыть диалог
                 try:
                     page.close(dialog)
                 except Exception:
                     pass
-                try:
-                    s = tg_scheduler.get_global()
-                    if s:
-                        s.stop()
-                except Exception:
-                    pass
-                try:
-                    page.window.destroy()
-                except Exception:
-                    pass
-                try:
-                    os._exit(0)
-                except Exception:
-                    pass
+
+                # 2. ЖЁСТКИЙ выход — гарантированно закрывает процесс,
+                #    не даёт окну зависнуть.
+                _hard_exit()
 
             def do_cancel(ev):
                 try:
@@ -151,7 +176,6 @@ def main(page: ft.Page) -> None:
                 width=440,
             )
 
-            # Кнопки — нормальные, с текстом внутри
             minimize_btn = ft.OutlinedButton(
                 content=ft.Row(
                     controls=[
@@ -211,6 +235,7 @@ def main(page: ft.Page) -> None:
                 page.update()
             except Exception:
                 pass
+
         def _on_window_event(e):
             try:
                 if e.data == "close":
@@ -231,7 +256,13 @@ def main(page: ft.Page) -> None:
     def show_main(profile: UserProfile) -> None:
         set_current(profile)
         page.controls.clear()
-        page.add(ChatScreen(page).build())
+        screen = ChatScreen(page)
+        # Сохраняем ссылку для _reload_app и _handle_send_to_tg
+        try:
+            setattr(page, "_vagent_chat_screen", screen)
+        except Exception:
+            pass
+        page.add(screen.build())
         page.update()
 
     def show_onboarding() -> None:
