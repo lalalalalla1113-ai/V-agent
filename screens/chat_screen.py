@@ -1,4 +1,7 @@
-"""Главный экран-чат: боковая панель + лента + нижний блок + фон."""
+"""Главный экран-чат: боковая панель + лента + нижний блок + фон.
+
+Enter — новая строка. Ctrl+Enter — отправить.
+"""
 
 import shutil
 import threading
@@ -38,7 +41,7 @@ class ChatScreen:
         self._ensure_project_loaded()
         self.mobile = _is_mobile(page)
 
-        # Вложения храним в РЕАЛЬНОЙ папке данных
+        # Вложения в РЕАЛЬНОЙ папке данных
         self.attachments_dir = _paths.data_dir() / "attachments"
         self.attachments_dir.mkdir(parents=True, exist_ok=True)
 
@@ -124,11 +127,18 @@ class ChatScreen:
             controls=[], spacing=8, wrap=True, visible=False,
         )
 
+        # multiline TextField: Enter внутри — новая строка (стандартное поведение)
         self.input_field = ft.TextField(
             hint_text="Напиши свою идею...",
-            multiline=True, min_lines=2, max_lines=6,
-            filled=True, fill_color=theme.SURFACE, color=theme.TEXT_PRIMARY,
-            border_radius=theme.RADIUS, border_color=theme.SURFACE, expand=True,
+            multiline=True,
+            min_lines=2,
+            max_lines=6,
+            filled=True,
+            fill_color=theme.SURFACE,
+            color=theme.TEXT_PRIMARY,
+            border_radius=theme.RADIUS,
+            border_color=theme.SURFACE,
+            expand=True,
         )
 
         self.attach_button = ft.IconButton(
@@ -141,15 +151,37 @@ class ChatScreen:
             icon=ft.Icons.ARROW_UPWARD_ROUNDED, icon_size=20,
             icon_color=theme.TEXT_PRIMARY, bgcolor=theme.PRIMARY,
             on_click=self._handle_send,
+            tooltip="Отправить (Ctrl+Enter)",
         )
 
         self.show_input = True
         self.input_container = ft.Container(
-            content=ft.Row(
-                controls=[self.attach_button, self.input_field, self.send_button],
-                spacing=4, vertical_alignment=ft.CrossAxisAlignment.END,
+            content=ft.Column(
+                controls=[
+                    ft.Row(
+                        controls=[
+                            self.attach_button,
+                            self.input_field,
+                            self.send_button,
+                        ],
+                        spacing=4,
+                        vertical_alignment=ft.CrossAxisAlignment.END,
+                    ),
+                    ft.Container(
+                        content=ft.Text(
+                            "Enter — новая строка · Ctrl+Enter — отправить",
+                            size=10,
+                            color=theme.TEXT_MUTED,
+                            text_align=ft.TextAlign.RIGHT,
+                        ),
+                        padding=ft.padding.only(right=8, top=2),
+                    ),
+                ],
+                spacing=0,
+                tight=True,
             ),
-            padding=ft.padding.all(theme.PADDING), visible=True,
+            padding=ft.padding.all(theme.PADDING),
+            visible=True,
         )
 
         self.format_zone = ft.Container(visible=False)
@@ -526,9 +558,13 @@ class ChatScreen:
             pass
 
     def _on_keyboard(self, e: ft.KeyboardEvent) -> None:
+        """Ctrl+Enter — отправить. Enter — новая строка (сам TextField)."""
         if e.key != "Enter":
             return
         if e.shift:
+            return
+        # Отправляем ТОЛЬКО по Ctrl+Enter
+        if not e.ctrl:
             return
         if self.current_chat_id != "home":
             return
@@ -544,11 +580,9 @@ class ChatScreen:
     def _handle_nav(self, chat_id: str) -> None:
         print(f">>> [CHAT] nav to: {chat_id}")
 
-        # Если уже на этой вкладке — ничего не делаем
         if chat_id == self.current_chat_id:
             return
 
-        # Останавливаем/паузим старый экран
         prev = self._screen_cache.get(self.current_chat_id)
         if prev and hasattr(prev, "stop_effect"):
             try:
@@ -586,12 +620,6 @@ class ChatScreen:
                 pass
 
     def _refresh_main_area(self) -> None:
-        """Готовит контент под текущий chat_id и СРАЗУ применяет его.
-
-        ВАЖНО: main_area.content меняем в главном потоке и вызываем
-        page.update() один раз. Никаких threading.Timer — иначе UI
-        не успевает перерисоваться и кажется, что вкладка не переключилась.
-        """
         from screens.settings_screen import SettingsScreen
 
         print(f">>> [CHAT] _refresh_main_area: {self.current_chat_id}")
@@ -691,7 +719,6 @@ class ChatScreen:
             print(f">>> [CHAT] build screen error ({self.current_chat_id}): {ex}")
             content = self._build_home_content()
 
-        # Применяем контент СРАЗУ, в главном потоке
         try:
             self.main_area.content = content
         except Exception as ex:
@@ -705,7 +732,6 @@ class ChatScreen:
     # ---------- Панель проектов ----------
 
     def _toggle_projects_panel(self, e=None) -> None:
-        """Открывает/закрывает шторку проектов справа."""
         try:
             self.drawer.toggle()
         except Exception as ex:
@@ -749,7 +775,7 @@ class ChatScreen:
             pass
 
     def _do_logout(self) -> None:
-        """Полный выход из аккаунта: удаляем данные и перезапускаем онбординг."""
+        """Выход: удаляем ТОЛЬКО пользовательские данные, код не трогаем."""
         state.current_project = None
 
         self._stop_thinking(remove_widget=True)
@@ -942,8 +968,6 @@ class ChatScreen:
     def _render_messages(self) -> None:
         from datetime import datetime, date
 
-        # ОЧИЩАЕМ список ПЕРЕД отрисовкой — иначе новые пузыри
-        # накладываются на старые при переключении проекта.
         try:
             self.messages_list.controls.clear()
         except Exception:
@@ -1015,6 +1039,7 @@ class ChatScreen:
                     on_change_format=self._handle_change_format,
                     on_next=self._handle_next,
                     on_cancel=self._handle_cancel,
+                    on_send_to_tg=self._handle_send_to_tg,
                 )
             )
 
@@ -1022,6 +1047,35 @@ class ChatScreen:
             self.page.update()
         except Exception:
             pass
+
+    # ---------- Отправка в Telegram из карточки ИИ ----------
+
+    def _handle_send_to_tg(self, message_id: str, text: str) -> None:
+        """Открывает вкладку Telegram с предзаполненной темой."""
+        try:
+            # Переходим на вкладку Telegram
+            self._handle_nav("telegram")
+
+            # Даём время на отрисовку и вызываем форму с предзаполнением
+            def _open_form():
+                try:
+                    screen = self._screen_cache.get("telegram")
+                    if screen is None:
+                        return
+                    # Если метод есть — открываем форму с текстом
+                    if hasattr(screen, "open_post_form_with"):
+                        # Берём первые 60 символов текста как тему
+                        short_topic = text.strip()[:120]
+                        screen.open_post_form_with(topic=short_topic, full_text=text)
+                except Exception as ex:
+                    print(f"[CHAT] open_post_form_with error: {ex}")
+
+            t = threading.Timer(0.4, _open_form)
+            t.daemon = True
+            t.start()
+
+        except Exception as ex:
+            print(f"[CHAT] send_to_tg error: {ex}")
 
     # ---------- Отправка ----------
 
@@ -1060,14 +1114,41 @@ class ChatScreen:
 
         self._pending_ai_attachments = attachments_copy
 
+        # Стиль и профиль фиксируем СЕЙЧАС, чтобы не потерять
+        style_for_gen = self.current_style or "simple"
+
         def _worker():
-            from services.user_profile import get_current
-            variants = text_ai.generate_content(
-                idea=idea,
-                style=self.current_style or "simple",
-                history=state.current_project.messages,
-                profile=get_current(),
-            )
+            try:
+                from services.user_profile import get_current
+                profile = get_current()
+                if profile is None:
+                    print("[CHAT] WARN: get_current() вернул None, "
+                          "пробуем загрузить профиль с диска")
+                    from services.user_profile import UserProfile
+                    profile = UserProfile.load()
+                    if profile is not None:
+                        from services.user_profile import set_current
+                        set_current(profile)
+
+                print(f"[CHAT] генерирую: style={style_for_gen}, "
+                      f"idea_len={len(idea)}, profile={'есть' if profile else 'нет'}")
+
+                variants = text_ai.generate_content(
+                    idea=idea,
+                    style=style_for_gen,
+                    history=state.current_project.messages,
+                    profile=profile,
+                )
+                print(f"[CHAT] получено вариантов: {len(variants)}")
+            except Exception as ex:
+                import traceback
+                traceback.print_exc()
+                print(f"[CHAT] generation error: {ex}")
+                variants = [
+                    "❌ Ошибка генерации. Проверь лог: app.log",
+                    "Проверь ключ Cloudflare в Настройках.",
+                ]
+
             threading.Timer(0, lambda: self._finish_generation(variants)).start()
 
         threading.Thread(target=_worker, daemon=True).start()
@@ -1178,6 +1259,7 @@ class ChatScreen:
                 on_change_format=self._handle_change_format,
                 on_next=self._handle_next,
                 on_cancel=self._handle_cancel,
+                on_send_to_tg=self._handle_send_to_tg,
             )
         )
 
