@@ -1,8 +1,4 @@
-"""Роутер приложения V-AGENT.
-
-Планировщик Telegram запускается здесь и работает всё время,
-пока приложение в памяти (даже если окно свёрнуто).
-"""
+"""Роутер приложения V-AGENT."""
 
 import os
 import threading
@@ -18,7 +14,6 @@ from ui import theme
 
 
 def _is_mobile(page: ft.Page) -> bool:
-    """Проверяет, мобильное ли устройство (Android/iOS)."""
     try:
         if page.platform in ("android", "ios"):
             return True
@@ -32,36 +27,26 @@ def _is_mobile(page: ft.Page) -> bool:
 
 
 def _hard_exit() -> None:
-    """Жёстко завершает процесс.
+    """Мгновенный выход без зависания.
 
-    Перед выходом пытается остановить известные фоновые потоки,
-    но в любом случае через короткое время вызывает os._exit(0),
-    чтобы окно не зависало.
+    Не вызываем page.window.destroy() — он блокирует поток.
+    Просто останавливаем планировщик и убиваем процесс.
     """
-    # 1. Стоп планировщика Telegram
     try:
         s = tg_scheduler.get_global()
         if s is not None:
             s.stop()
-    except Exception as ex:
-        print(f"[EXIT] scheduler stop error: {ex}")
-
-    # 2. Стоп фоновых потоков текущего экрана
-    try:
-        from services.user_profile import get_current
-        # ChatScreen доступен через page._vagent_chat_screen (если установили)
-        pass
     except Exception:
         pass
 
-    # 3. Даём 200 мс на завершение, потом убиваем процесс
+    # Даём 100 мс на закрытие диалога, потом убиваем
     def _force():
         try:
             os._exit(0)
         except Exception:
             pass
 
-    t = threading.Timer(0.2, _force)
+    t = threading.Timer(0.1, _force)
     t.daemon = True
     t.start()
 
@@ -69,7 +54,6 @@ def _hard_exit() -> None:
 def main(page: ft.Page) -> None:
     page.title = "V-AGENT"
 
-    # --- Применяем сохранённую тему ---
     try:
         _existing_profile = UserProfile.load()
         _theme_key = (
@@ -92,22 +76,18 @@ def main(page: ft.Page) -> None:
 
     mobile = _is_mobile(page)
 
-    # Иконка окна
     try:
         page.window.icon = "logo_v_only.webp"
     except Exception:
         pass
 
-    # На Android — fullscreen (immersive).
     if mobile:
         try:
             page.window.full_screen = True
         except Exception as ex:
             print(f"[APP] fullscreen error: {ex}")
 
-    # ------------------------------------------------------------------
-    # Планировщик Telegram — стартует один раз
-    # ------------------------------------------------------------------
+    # ---------- Планировщик Telegram ----------
     try:
         scheduler = tg_scheduler.TgScheduler(page)
         scheduler.start()
@@ -116,9 +96,7 @@ def main(page: ft.Page) -> None:
     except Exception as ex:
         print(f"[APP] scheduler start error: {ex}")
 
-    # ------------------------------------------------------------------
-    # Умный крестик: свернуть в трей / выйти
-    # ------------------------------------------------------------------
+    # ---------- Умный крестик ----------
     if not mobile:
         def _show_exit_dialog():
             dialog = ft.AlertDialog(
@@ -139,14 +117,7 @@ def main(page: ft.Page) -> None:
                     print(f"[APP] minimize error: {ex}")
 
             def do_exit(ev):
-                # 1. Пытаемся закрыть диалог
-                try:
-                    page.close(dialog)
-                except Exception:
-                    pass
-
-                # 2. ЖЁСТКИЙ выход — гарантированно закрывает процесс,
-                #    не даёт окну зависнуть.
+                # Мгновенный выход, БЕЗ page.window.destroy()
                 _hard_exit()
 
             def do_cancel(ev):
@@ -249,15 +220,12 @@ def main(page: ft.Page) -> None:
         except Exception as ex:
             print(f"[APP] prevent_close error: {ex}")
 
-    # ------------------------------------------------------------------
-    # Экраны
-    # ------------------------------------------------------------------
+    # ---------- Экраны ----------
 
     def show_main(profile: UserProfile) -> None:
         set_current(profile)
         page.controls.clear()
         screen = ChatScreen(page)
-        # Сохраняем ссылку для _reload_app и _handle_send_to_tg
         try:
             setattr(page, "_vagent_chat_screen", screen)
         except Exception:
