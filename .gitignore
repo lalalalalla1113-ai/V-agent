@@ -1,29 +1,29 @@
 # ===========================================================================
-# ЛОКАЛЬНЫЕ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ — НИКОГДА не коммитить
+# ДАННЫЕ ПОЛЬЗОВАТЕЛЯ — НИКОГДА не коммитить
 # ===========================================================================
 ContentFarm/
 user_profile.json
 ai_chat.json
 image_history.json
-image_storage.json
+images.json
 ideas_history.json
 template_history.json
-auto_content.json
 tg_schedule.json
 tg_history.json
 reminders.json
-images.json
 images/
 attachments/
 avatar.png
 app.log
 *.log
 
-# Если случайно появится папка с ключами в корне — не пускать
+# Секреты (на всякий случай)
 *.key
 *.token
 secrets.json
 config.local.json
+.env
+.env.local
 
 # ===========================================================================
 # Python
@@ -67,7 +67,6 @@ build/
 .pub/
 *.iml
 .gradle/
-gradle-wrapper.jar
 local.properties
 .idea/
 
@@ -86,3 +85,10 @@ local.properties
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ===========================================================================
+# Flet build output
+# ===========================================================================
+*.spec
+vagent.spec
+V-AGENT.spec
