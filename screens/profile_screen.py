@@ -53,12 +53,18 @@ class ProfileScreen:
 
         self._refresh_all()
 
+        # ============================================================
+        # ЛОГОТИП — без рамки
+        # ============================================================
         logo_header = ft.Container(
             content=ft.Image(
-                src="logo_text.webp",
-                width=200, height=60, fit=ft.ImageFit.CONTAIN,
+                src="logo_text.png",
+                width=200,
+                height=60,
+                fit=ft.ImageFit.CONTAIN,
             ),
             alignment=ft.alignment.center,
+            bgcolor=theme.BG_DARK,
         )
 
         cf_status_text = (
@@ -405,7 +411,7 @@ class ProfileScreen:
             ft.TextButton("Отмена", on_click=close,
                           style=ft.ButtonStyle(color=theme.TEXT_SECONDARY)),
         ]
-        dialog.actions_alignment = ft.MainAxisAlignment.END
+        dialog.actions_alignment=ft.MainAxisAlignment.END
 
         self._current_dialog = dialog
         self.page.open(dialog)
@@ -463,7 +469,7 @@ class ProfileScreen:
             ft.TextButton("Отмена", on_click=close,
                           style=ft.ButtonStyle(color=theme.TEXT_SECONDARY)),
         ]
-        dialog.actions_alignment = ft.MainAxisAlignment.END
+        dialog.actions_alignment=ft.MainAxisAlignment.END
 
         self._current_dialog = dialog
         self.page.open(dialog)
