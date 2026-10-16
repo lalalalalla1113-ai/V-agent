@@ -1,6 +1,6 @@
-"""Экран регистрации (онбординг) — 6 шагов.
+"""Экран регистрации (онбординг) — 5 шагов.
 
-Шаги: Имя → Возраст → Пол → Интересы → Аудитория → Токен Cloudflare.
+Шаги: Имя → Возраст → Пол → Интересы → Cloudflare (обязательно).
 Адаптивно под мобильные экраны + красная рамка на ошибке поля.
 
 Enter на шагах с полями — переход к следующему шагу.
@@ -15,7 +15,7 @@ from services.user_profile import UserProfile
 from ui import theme
 
 
-TOTAL_STEPS = 6
+TOTAL_STEPS = 5
 
 
 INTERESTS = [
@@ -70,8 +70,9 @@ class OnboardingScreen:
             self.age_value = str(initial_profile.age) if initial_profile.age else ""
             self.gender_value = initial_profile.gender
             self.interests_value = list(initial_profile.interests)
-            self.audience_value = initial_profile.audience
+            self.audience_value = initial_profile.audience  # оставляем, но не редактируем
             self.cf_token_value = getattr(initial_profile, "cf_token", "")
+            self.cf_account_value = getattr(initial_profile, "cf_account", "")
         else:
             self.name_value = ""
             self.age_value = ""
@@ -79,6 +80,7 @@ class OnboardingScreen:
             self.interests_value = []
             self.audience_value = ""
             self.cf_token_value = ""
+            self.cf_account_value = ""
 
         self.current_step = 1
 
@@ -287,12 +289,9 @@ class OnboardingScreen:
         elif self.current_step == 4:
             new_content = self._step_interests()
             self.step_label.value = f"Шаг 4 из {TOTAL_STEPS} · Интересы"
-        elif self.current_step == 5:
-            new_content = self._step_audience()
-            self.step_label.value = f"Шаг 5 из {TOTAL_STEPS} · Аудитория"
         else:
             new_content = self._step_cf_token()
-            self.step_label.value = f"Шаг 6 из {TOTAL_STEPS} · Cloudflare"
+            self.step_label.value = f"Шаг 5 из {TOTAL_STEPS} · Cloudflare"
 
         self.step_container.content = new_content
         self.step_container.opacity = 0
@@ -520,59 +519,10 @@ class OnboardingScreen:
             scroll=ft.ScrollMode.AUTO,
         )
 
-    def _step_audience(self) -> ft.Control:
-        # Enter переводит на следующий шаг
-        def _on_submit(e):
-            self._handle_next(None)
-
-        field = ft.TextField(
-            value=self.audience_value,
-            hint_text="Например, мамы 20-35 лет, IT-специалисты…",
-            multiline=True, min_lines=3, max_lines=5,
-            filled=True, fill_color=theme.SURFACE, color=theme.TEXT_PRIMARY,
-            border_radius=12, border_color=theme.SURFACE,
-            focused_border_color=theme.PRIMARY,
-            text_size=14,
-            on_change=self._on_audience_change,
-            on_submit=_on_submit,
-        )
-        return ft.Column(
-            controls=[
-                ft.Text("Под какую аудиторию работаешь?", size=16,
-                        color=theme.TEXT_PRIMARY, weight=ft.FontWeight.BOLD),
-                ft.Container(height=4),
-                ft.Text("Необязательно — можно пропустить. Enter — далее.",
-                        size=12, color=theme.TEXT_SECONDARY),
-                ft.Container(height=12),
-                field,
-            ],
-            spacing=0,
-            horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-        )
-
     def _step_cf_token(self) -> ft.Control:
-        instruction = ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Text("Как получить ключ:", size=13,
-                            weight=ft.FontWeight.BOLD, color=theme.TEXT_PRIMARY),
-                    ft.Container(height=8),
-                    self._step_link_row("1", "Открой",
-                                        "dash.cloudflare.com/profile/api-tokens",
-                                        "https://dash.cloudflare.com/profile/api-tokens"),
-                    self._step_row("2", "Найди «API token templates»"),
-                    self._step_row("3", "Нажми Use template → Workers AI"),
-                    self._step_row("4", "Continue to summary → Create Token"),
-                    self._step_row("5", "Скопируй и вставь сюда"),
-                ],
-                spacing=0,
-                horizontal_alignment=ft.CrossAxisAlignment.START,
-            ),
-            padding=ft.padding.all(12),
-            bgcolor=theme.SURFACE, border_radius=12,
-        )
+        """Шаг Cloudflare — обязательный. Токен + Account ID + инструкция."""
 
-        key_field = ft.TextField(
+        token_field = ft.TextField(
             value=self.cf_token_value,
             hint_text="cfut_...",
             password=True, can_reveal_password=True,
@@ -582,21 +532,141 @@ class OnboardingScreen:
             text_size=14,
             on_change=self._on_cf_token_change,
         )
+        self._current_field_ref.append(token_field)
+
+        account_field = ft.TextField(
+            value=self.cf_account_value,
+            hint_text="32 символа или ссылка из адресной строки Cloudflare",
+            filled=True, fill_color=theme.SURFACE, color=theme.TEXT_PRIMARY,
+            border_radius=12, border_color=theme.SURFACE,
+            focused_border_color=theme.PRIMARY,
+            text_size=14,
+            on_change=self._on_cf_account_change,
+        )
+
+        # Инструкция по токену
+        token_instruction = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Шаг 1. Получи токен Cloudflare",
+                            size=13, weight=ft.FontWeight.BOLD,
+                            color=theme.TEXT_PRIMARY),
+                    ft.Container(height=8),
+                    self._step_link_row(
+                        "1", "Открой",
+                        "dash.cloudflare.com/profile/api-tokens",
+                        "https://dash.cloudflare.com/profile/api-tokens",
+                    ),
+                    self._step_row("2", "Найди «API token templates»"),
+                    self._step_row("3", "Нажми Use template → Workers AI"),
+                    self._step_row("4", "Continue to summary → Create Token"),
+                    self._step_row("5", "Скопируй токен и вставь в поле выше"),
+                ],
+                spacing=0,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            ),
+            padding=ft.padding.all(12),
+            bgcolor=theme.SURFACE, border_radius=12,
+        )
+
+        # Инструкция по Account ID
+        account_instruction = ft.Container(
+            content=ft.Column(
+                controls=[
+                    ft.Text("Шаг 2. Получи Account ID",
+                            size=13, weight=ft.FontWeight.BOLD,
+                            color=theme.TEXT_PRIMARY),
+                    ft.Container(height=6),
+                    ft.Text(
+                        "Account ID — это 32-значный код твоего аккаунта "
+                        "Cloudflare. Он виден в адресной строке, когда ты "
+                        "заходишь в дашборд.",
+                        size=11, color=theme.TEXT_SECONDARY,
+                    ),
+                    ft.Container(height=8),
+                    self._step_link_row(
+                        "1", "Открой",
+                        "dash.cloudflare.com",
+                        "https://dash.cloudflare.com",
+                    ),
+                    self._step_row(
+                        "2",
+                        "Посмотри адресную строку браузера",
+                    ),
+                    ft.Container(
+                        content=ft.Text(
+                            "dash.cloudflare.com/abc123def456.../home",
+                            size=10, color=theme.PRIMARY,
+                            italic=True,
+                            selectable=True,
+                        ),
+                        padding=ft.padding.only(left=26, top=2, bottom=4),
+                    ),
+                    self._step_row(
+                        "3",
+                        "Скопируй 32 символа между «.com/» и «/home»",
+                    ),
+                    self._step_row(
+                        "4",
+                        "Вставь в поле Account ID. Можно вставить "
+                        "всю ссылку — ID определится автоматически",
+                    ),
+                ],
+                spacing=0,
+                horizontal_alignment=ft.CrossAxisAlignment.START,
+            ),
+            padding=ft.padding.all(12),
+            bgcolor=theme.SURFACE, border_radius=12,
+        )
 
         return ft.Column(
             controls=[
-                ft.Text("Подключи Cloudflare", size=16,
-                        color=theme.TEXT_PRIMARY, weight=ft.FontWeight.BOLD),
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.CLOUD_ROUNDED, size=20,
+                                color=theme.PRIMARY),
+                        ft.Text("Подключи Cloudflare",
+                                size=16, weight=ft.FontWeight.BOLD,
+                                color=theme.TEXT_PRIMARY),
+                        ft.Container(
+                            content=ft.Text("обязательно", size=10,
+                                            color=ft.Colors.WHITE,
+                                            weight=ft.FontWeight.BOLD),
+                            padding=ft.padding.symmetric(
+                                horizontal=8, vertical=3),
+                            bgcolor=theme.DANGER,
+                            border_radius=6,
+                        ),
+                    ],
+                    spacing=10, tight=True,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
                 ft.Container(height=4),
-                ft.Text("Ключ нужен для картинок и текста",
-                        size=12, color=theme.TEXT_SECONDARY),
-                ft.Container(height=12),
-                instruction,
-                ft.Container(height=12),
-                key_field,
-                ft.Container(height=8),
-                ft.Text("Необязательно. Можно добавить позже в Настройках.",
-                        size=11, color=theme.TEXT_SECONDARY, italic=True),
+                ft.Text(
+                    "Без ключа Cloudflare приложение не сможет "
+                    "генерировать текст и картинки.",
+                    size=12, color=theme.TEXT_SECONDARY,
+                ),
+                ft.Container(height=14),
+                token_instruction,
+                ft.Container(height=10),
+                ft.Text("API Token", size=12, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY),
+                ft.Container(height=4),
+                token_field,
+                ft.Container(height=14),
+                account_instruction,
+                ft.Container(height=10),
+                ft.Text("Account ID", size=12, weight=ft.FontWeight.BOLD,
+                        color=theme.TEXT_PRIMARY),
+                ft.Container(height=4),
+                account_field,
+                ft.Container(height=10),
+                ft.Text(
+                    "Ключ и ID хранятся только на твоём устройстве. "
+                    "Никуда не отправляются, кроме Cloudflare.",
+                    size=10, color=theme.TEXT_MUTED, italic=True,
+                ),
             ],
             spacing=0,
             horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
@@ -613,7 +683,8 @@ class OnboardingScreen:
                         width=18, height=18, bgcolor=theme.PRIMARY,
                         border_radius=9, alignment=ft.alignment.center,
                     ),
-                    ft.Text(text, size=11, color=theme.TEXT_SECONDARY),
+                    ft.Text(text, size=11, color=theme.TEXT_SECONDARY,
+                            no_wrap=False),
                 ],
                 spacing=8,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
@@ -666,11 +737,11 @@ class OnboardingScreen:
                 pass
         self.age_value = v
 
-    def _on_audience_change(self, e) -> None:
-        self.audience_value = e.control.value or ""
-
     def _on_cf_token_change(self, e) -> None:
         self.cf_token_value = (e.control.value or "").strip()
+
+    def _on_cf_account_change(self, e) -> None:
+        self.cf_account_value = (e.control.value or "").strip()
 
     def _on_gender_change(self, gender: str) -> None:
         self.gender_value = gender
@@ -746,6 +817,17 @@ class OnboardingScreen:
             if not self.interests_value:
                 self._show_error("Выбери хотя бы один интерес")
                 return False
+        elif self.current_step == 5:
+            # Cloudflare — обязательно
+            if not self.cf_token_value.strip():
+                self._shake_and_red(field, "Вставь API Token Cloudflare")
+                return False
+            if len(self.cf_token_value.strip()) < 20:
+                self._shake_and_red(
+                    field,
+                    "Токен слишком короткий. Скопируй его целиком из Cloudflare.",
+                )
+                return False
         return True
 
     def _show_error(self, text: str) -> None:
@@ -766,24 +848,34 @@ class OnboardingScreen:
         except Exception:
             pass
 
+        # Account ID может быть ссылкой — нормализуем через cf_config
+        cf_account_clean = ""
+        try:
+            from services import cf_config
+            cf_account_clean = cf_config.parse_account_id(
+                self.cf_account_value.strip()
+            )
+        except Exception:
+            cf_account_clean = self.cf_account_value.strip()
+
         if initial is not None:
-            # Обновляем ТОЛЬКО анкетные поля
             initial.name = self.name_value.strip()
             initial.age = int(self.age_value) if self.age_value.strip() else 0
             initial.gender = self.gender_value
             initial.interests = list(self.interests_value)
-            initial.audience = self.audience_value.strip()
+            # audience не трогаем — оставляем как было
             initial.cf_token = self.cf_token_value.strip()
+            initial.cf_account = cf_account_clean
             profile = initial
         else:
-            # Первая регистрация
             profile = UserProfile(
                 name=self.name_value.strip(),
                 age=int(self.age_value) if self.age_value.strip() else 0,
                 gender=self.gender_value,
                 interests=list(self.interests_value),
-                audience=self.audience_value.strip(),
+                audience="",  # убрали шаг
                 cf_token=self.cf_token_value.strip(),
+                cf_account=cf_account_clean,
             )
 
         profile.save()
