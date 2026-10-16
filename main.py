@@ -1,50 +1,37 @@
 """Точка входа приложения V-AGENT."""
 
-import os
+import socket
 import sys
 
+from services import paths
 
-def _setup_logging() -> None:
-    """Логи в системную папку пользователя, а не в проект."""
+# В .exe без консоли stdout/stderr отсутствуют — пишем в лог-файл,
+# чтобы print() не падал и было что смотреть при ошибках.
+if paths.is_frozen():
     try:
-        log_dir = os.environ.get("FLET_APP_STORAGE_DATA")
-        if not log_dir:
-            if sys.platform == "win32":
-                base = os.environ.get("APPDATA") or os.path.expanduser(
-                    "~\\AppData\\Roaming"
-                )
-            elif sys.platform == "darwin":
-                base = os.path.expanduser("~/Library/Application Support")
-            else:
-                base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser(
-                    "~/.local/share"
-                )
-            log_dir = os.path.join(base, "V-AGENT")
-
-        os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, "app.log")
-
-        try:
-            if os.path.exists(log_path) and os.path.getsize(log_path) > 5_000_000:
-                os.remove(log_path)
-        except Exception:
-            pass
-
-        f = open(log_path, "a", encoding="utf-8", buffering=1)
-        sys.stdout = f
-        sys.stderr = f
-        print(">>> LOG STARTED")
+        _log = paths.data_dir() / "app.log"
+        if _log.exists() and _log.stat().st_size > 1_000_000:
+            _log.unlink()
+        sys.stdout = sys.stderr = open(_log, "a", encoding="utf-8", buffering=1)
     except Exception:
         pass
-
-
-_setup_logging()
-
 
 import flet as ft  # noqa: E402
 
 from app import main  # noqa: E402
 
 
+def _free_port() -> int:
+    s = socket.socket()
+    s.bind(("", 0))
+    p = s.getsockname()[1]
+    s.close()
+    return p
+
+
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.app(
+        target=main,
+        assets_dir=str(paths.resource_dir() / "assets"),
+        port=_free_port(),
+    )
